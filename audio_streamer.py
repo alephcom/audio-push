@@ -14,8 +14,11 @@ import argparse
 import signal
 import json
 import threading
+import hashlib
+import urllib.request
+import urllib.error
 from pathlib import Path
-from typing import List, Dict
+from typing import List, Dict, Optional
 
 
 class StreamEndpoint:
@@ -94,16 +97,23 @@ class AudioStreamer:
         
         # For legacy mode, validate MP3 file exists
         if mp3_file:
-            mp3_path = Path(mp3_file)
+            # Check if it's a URL or local file
+            resolved_file = resolve_source_file(mp3_file)
+            mp3_path = Path(resolved_file)
             if not mp3_path.exists():
                 raise FileNotFoundError(f"MP3 file not found: {mp3_path}")
             # In legacy mode, set source_file for all endpoints
             for endpoint in self.endpoints:
                 endpoint.source_file = str(mp3_path)
         else:
-            # Validate source files exist for each endpoint
+            # Validate and resolve source files for each endpoint
             for endpoint in self.endpoints:
-                source_path = Path(endpoint.source_file)
+                # Resolve the source file (download if URL, keep as-is if local)
+                resolved_file = resolve_source_file(endpoint.source_file)
+                endpoint.source_file = resolved_file
+                
+                # Validate the resolved file exists
+                source_path = Path(resolved_file)
                 if not source_path.exists():
                     raise FileNotFoundError(f"Source MP3 file not found for endpoint {endpoint.host}:{endpoint.port}{endpoint.mount}: {source_path}")
         
@@ -288,6 +298,92 @@ class AudioStreamer:
             return True
         except (subprocess.CalledProcessError, FileNotFoundError):
             return False
+
+
+def get_cache_dir() -> Path:
+    """Get or create the cache directory."""
+    cache_dir = Path.home() / '.cache' / 'audio-push'
+    cache_dir.mkdir(parents=True, exist_ok=True)
+    return cache_dir
+
+
+def download_and_cache_file(url: str) -> Path:
+    """
+    Download a file from URL and cache it locally.
+    Only downloads if the file doesn't already exist in the cache.
+    
+    Args:
+        url: URL to download (http:// or https://)
+        
+    Returns:
+        Path to the cached file
+    """
+    cache_dir = get_cache_dir()
+    
+    # Create a hash of the URL to use as the filename
+    url_hash = hashlib.md5(url.encode()).hexdigest()
+    
+    # Try to determine file extension from URL or default to .mp3
+    url_path = Path(url)
+    extension = url_path.suffix if url_path.suffix else '.mp3'
+    cached_file = cache_dir / f"{url_hash}{extension}"
+    
+    # Only download if file doesn't already exist in cache
+    if cached_file.exists():
+        print(f"Using cached file for {url}: {cached_file}")
+        return cached_file
+    
+    # File doesn't exist in cache, download it
+    print(f"Downloading {url} to cache...")
+    try:
+        with urllib.request.urlopen(url, timeout=30) as response:
+            # Check if we got a valid response
+            if response.status != 200:
+                raise urllib.error.HTTPError(
+                    url, response.status, 
+                    f"HTTP {response.status}", 
+                    response.headers, 
+                    None
+                )
+            
+            # Read and write to cache file
+            with open(cached_file, 'wb') as f:
+                # Read in chunks to handle large files
+                while True:
+                    chunk = response.read(8192)
+                    if not chunk:
+                        break
+                    f.write(chunk)
+        
+        print(f"Downloaded and cached: {cached_file}")
+        return cached_file
+        
+    except urllib.error.URLError as e:
+        raise ValueError(f"Failed to download {url}: {e}")
+    except Exception as e:
+        # Clean up partial file on error
+        if cached_file.exists():
+            cached_file.unlink()
+        raise ValueError(f"Error downloading {url}: {e}")
+
+
+def resolve_source_file(source_file: str) -> str:
+    """
+    Resolve source file path, downloading from URL if necessary.
+    
+    Args:
+        source_file: Local file path or HTTP/HTTPS URL
+        
+    Returns:
+        Path to local file (either original path or cached download)
+    """
+    # Check if it's a URL
+    if source_file.startswith('http://') or source_file.startswith('https://'):
+        cached_file = download_and_cache_file(source_file)
+        return str(cached_file)
+    else:
+        # It's a local file path
+        return source_file
 
 
 def load_config(config_file: str) -> Dict:
