@@ -7,7 +7,9 @@
       "username": "source",
       "password": "your_source_password",
       "stream_name": "My Radio Station",
-      "bitrate": "128k"
+      "bitrate": "128k",
+      "source_file": "path/to/audio1.mp3",
+      "protocol": "http"
     },
     {
       "host": "icecast.example.com",
@@ -16,7 +18,9 @@
       "username": "source",
       "password": "another_password",
       "stream_name": "Alternative Stream",
-      "bitrate": "128k"
+      "bitrate": "128k",
+      "source_file": "path/to/audio1.mp3",
+      "protocol": "https"
     },
     {
       "host": "192.168.1.100",
@@ -25,16 +29,20 @@
       "username": "source",
       "password": "password123",
       "stream_name": "Backup Stream",
-      "bitrate": "128k"
+      "bitrate": "128k",
+      "source_file": "path/to/audio2.mp3",
+      "protocol": "http"
     },
     {
       "host": "192.168.1.101",
-      "port": 8000,
+      "port": 8443,
       "mount": "/low_quality.mp3",
       "username": "source",
       "password": "password456",
       "stream_name": "Low Quality Stream",
-      "bitrate": "64k"
+      "bitrate": "64k",
+      "source_file": "path/to/audio2.mp3",
+      "protocol": "https"
     }
   ]
 }

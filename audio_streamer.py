@@ -35,16 +35,22 @@ class StreamEndpoint:
         self.password = config.get('password')
         self.stream_name = config.get('stream_name', 'Audio Stream')
         self.bitrate = config.get('bitrate', '128k')  # Default to 128k if not specified
+        self.source_file = config.get('source_file')  # Source MP3 file for this endpoint
+        self.protocol = config.get('protocol', 'http').lower()  # http or https, default to http
         self.process = None
         self.running = True
         
         # Validate required fields
-        if not all([self.host, self.port, self.mount, self.password]):
-            raise ValueError("Endpoint missing required fields: host, port, mount, password")
+        if not all([self.host, self.port, self.mount, self.password, self.source_file]):
+            raise ValueError("Endpoint missing required fields: host, port, mount, password, source_file")
+        
+        # Validate protocol
+        if self.protocol not in ['http', 'https']:
+            raise ValueError(f"Protocol must be 'http' or 'https', got: {self.protocol}")
     
     def get_icecast_url(self):
         """Get the Icecast URL for this endpoint."""
-        return f"http://{self.username}:{self.password}@{self.host}:{self.port}{self.mount}"
+        return f"{self.protocol}://{self.username}:{self.password}@{self.host}:{self.port}{self.mount}"
 
 
 class StreamGroup:
@@ -73,23 +79,33 @@ class StreamGroup:
 class AudioStreamer:
     """Streams audio files to one or more Icecast servers."""
     
-    def __init__(self, mp3_file: str, endpoints: List[StreamEndpoint]):
+    def __init__(self, endpoints: List[StreamEndpoint], mp3_file: str = None):
         """
         Initialize the audio streamer.
         
         Args:
-            mp3_file: Path to the MP3 file to stream
             endpoints: List of StreamEndpoint objects to stream to
+            mp3_file: Optional path to MP3 file (legacy mode, when not using config)
         """
-        self.mp3_file = Path(mp3_file)
         self.endpoints = endpoints
         self.running = True
         self.stream_groups = []  # Groups of endpoints by (file, bitrate)
         self.processes = {}  # Track processes by group identifier
         
-        # Validate MP3 file exists
-        if not self.mp3_file.exists():
-            raise FileNotFoundError(f"MP3 file not found: {self.mp3_file}")
+        # For legacy mode, validate MP3 file exists
+        if mp3_file:
+            mp3_path = Path(mp3_file)
+            if not mp3_path.exists():
+                raise FileNotFoundError(f"MP3 file not found: {mp3_path}")
+            # In legacy mode, set source_file for all endpoints
+            for endpoint in self.endpoints:
+                endpoint.source_file = str(mp3_path)
+        else:
+            # Validate source files exist for each endpoint
+            for endpoint in self.endpoints:
+                source_path = Path(endpoint.source_file)
+                if not source_path.exists():
+                    raise FileNotFoundError(f"Source MP3 file not found for endpoint {endpoint.host}:{endpoint.port}{endpoint.mount}: {source_path}")
         
         if not self.endpoints:
             raise ValueError("At least one endpoint must be provided")
@@ -102,7 +118,9 @@ class AudioStreamer:
         groups_dict = {}
         
         for endpoint in self.endpoints:
-            key = (str(self.mp3_file), endpoint.bitrate)
+            # Use endpoint's source_file instead of shared mp3_file
+            source_path = Path(endpoint.source_file)
+            key = (str(source_path.absolute()), endpoint.bitrate)
             if key not in groups_dict:
                 groups_dict[key] = []
             groups_dict[key].append(endpoint)
@@ -149,7 +167,7 @@ class AudioStreamer:
             print("Error: ffmpeg is not installed or not in PATH")
             sys.exit(1)
         
-        print(f"Starting stream of {self.mp3_file.name} to {len(self.endpoints)} Icecast endpoint(s)...")
+        print(f"Starting stream to {len(self.endpoints)} Icecast endpoint(s)...")
         print("-" * 60)
         print(f"Grouped into {len(self.stream_groups)} stream group(s) by (file, bitrate)")
         print("-" * 60)
@@ -158,11 +176,13 @@ class AudioStreamer:
         for group in self.stream_groups:
             group_id = group.get_group_id()
             print(f"\nGroup: {group_id} ({len(group.endpoints)} endpoint(s))")
+            print(f"  Source File: {group.mp3_file}")
             for endpoint in group.endpoints:
                 endpoint_id = self.get_endpoint_id(endpoint)
-                print(f"  → {endpoint.host}:{endpoint.port}{endpoint.mount}")
+                print(f"  → {endpoint.protocol.upper()}://{endpoint.host}:{endpoint.port}{endpoint.mount}")
                 print(f"    Stream Name: {endpoint.stream_name}")
                 print(f"    Username: {endpoint.username}")
+                print(f"    Bitrate: {endpoint.bitrate}")
         
         print("-" * 60)
         print("\nPress Ctrl+C to stop streaming\n")
@@ -324,8 +344,8 @@ Examples:
         """
     )
     
-    parser.add_argument('-f', '--file', required=True,
-                       help='Path to MP3 file to stream')
+    parser.add_argument('-f', '--file',
+                       help='Path to MP3 file to stream (required for legacy mode, not needed with config file)')
     parser.add_argument('-c', '--config',
                        help='Path to JSON configuration file with endpoint(s)')
     
@@ -357,7 +377,7 @@ Examples:
         except Exception as e:
             print(f"Error loading configuration: {e}", file=sys.stderr)
             sys.exit(1)
-    elif all([args.host, args.port, args.mount, args.password]):
+    elif all([args.host, args.port, args.mount, args.password, args.file]):
         # Use command-line arguments (legacy mode)
         endpoint_config = {
             'host': args.host,
@@ -365,7 +385,8 @@ Examples:
             'mount': args.mount,
             'password': args.password,
             'username': args.username,
-            'stream_name': args.name
+            'stream_name': args.name,
+            'protocol': 'http'  # Default to http for legacy mode
         }
         try:
             endpoints = [StreamEndpoint(endpoint_config)]
@@ -373,8 +394,11 @@ Examples:
             print(f"Error creating endpoint: {e}", file=sys.stderr)
             sys.exit(1)
     else:
-        print("Error: Either provide a configuration file (-c) or all endpoint parameters (-H, -p, -m, -P)", 
-              file=sys.stderr)
+        if not args.config:
+            print("Error: Either provide a configuration file (-c) or all endpoint parameters (-H, -p, -m, -P, -f)", 
+                  file=sys.stderr)
+        else:
+            print("Error: Invalid configuration", file=sys.stderr)
         sys.exit(1)
     
     if not endpoints:
@@ -383,9 +407,11 @@ Examples:
     
     # Create streamer instance
     try:
+        # In config mode, mp3_file is None (source files come from config)
+        # In legacy mode, mp3_file is required
         streamer = AudioStreamer(
-            mp3_file=args.file,
-            endpoints=endpoints
+            endpoints=endpoints,
+            mp3_file=args.file if not args.config else None
         )
         
         # Set up signal handlers for graceful shutdown

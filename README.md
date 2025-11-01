@@ -58,16 +58,20 @@ The recommended way to use this application is with a JSON configuration file th
       "username": "source",
       "password": "your_source_password",
       "stream_name": "My Radio Station",
-      "bitrate": "128k"
+      "bitrate": "128k",
+      "source_file": "path/to/audio.mp3",
+      "protocol": "http"
     },
     {
       "host": "icecast.example.com",
-      "port": 8000,
+      "port": 8443,
       "mount": "/live.mp3",
       "username": "source",
       "password": "another_password",
       "stream_name": "Alternative Stream",
-      "bitrate": "192k"
+      "bitrate": "192k",
+      "source_file": "path/to/audio2.mp3",
+      "protocol": "https"
     }
   ]
 }
@@ -76,7 +80,7 @@ The recommended way to use this application is with a JSON configuration file th
 2. Run the application:
 
 ```bash
-python audio_streamer.py -f audio.mp3 -c config.json
+python audio_streamer.py -c config.json
 ```
 
 ### JSON Configuration Format
@@ -87,6 +91,8 @@ Each endpoint in the configuration file must include:
 - `port`: Icecast server port, typically 8000 (required)
 - `mount`: Icecast mount point, e.g., `/stream.mp3` (required)
 - `password`: Icecast source password (required)
+- `source_file`: Path to the source MP3 file to stream (required)
+- `protocol`: Protocol to use, either `http` or `https` (optional, default: `http`)
 - `username`: Icecast username (optional, default: `source`)
 - `stream_name`: Name of the stream (optional, default: `Audio Stream`)
 - `bitrate`: Audio bitrate, e.g., `128k`, `192k`, `64k` (optional, default: `128k`)
@@ -114,19 +120,19 @@ python audio_streamer.py -f audio.mp3 -H localhost -p 8000 -m /stream.mp3 -P pas
 
 ```bash
 chmod +x audio_streamer.py
-./audio_streamer.py -f audio.mp3 -c config.json
+./audio_streamer.py -c config.json
 ```
 
 ## How It Works
 
-1. The application reads the specified MP3 file
-2. Loads endpoint configuration from JSON file or command-line arguments
+1. Loads endpoint configuration from JSON file or command-line arguments
+2. Each endpoint specifies its own source MP3 file and protocol (HTTP/HTTPS)
 3. Groups endpoints by (source_file, bitrate) combination for efficiency
 4. Creates one FFmpeg process per group (multiple endpoints with same file/bitrate share a process)
-5. Streams to all configured Icecast servers simultaneously
-6. Automatically loops the file indefinitely for each endpoint
+5. Streams to all configured Icecast servers simultaneously using the specified protocol
+6. Automatically loops the source file indefinitely for each endpoint
 7. Handles reconnections if any stream drops
-8. Each endpoint can have its own bitrate configuration
+8. Each endpoint can have its own source file, bitrate, and protocol configuration
 
 ### Optimization
 
