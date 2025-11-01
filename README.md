@@ -80,7 +80,11 @@ The recommended way to use this application is with a JSON configuration file th
 2. Run the application:
 
 ```bash
+# Using a local configuration file
 python audio_streamer.py -c config.json
+
+# Or using a remote configuration file URL
+python audio_streamer.py -c https://example.com/config.json
 ```
 
 ### JSON Configuration Format

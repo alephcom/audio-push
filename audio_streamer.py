@@ -323,10 +323,10 @@ def download_and_cache_file(url: str) -> Path:
     # Create a hash of the URL to use as the filename
     url_hash = hashlib.md5(url.encode()).hexdigest()
     
-    # Try to determine file extension from URL or default to .mp3
+    # Try to determine file extension from URL or try to infer from content-type
     url_path = Path(url)
-    extension = url_path.suffix if url_path.suffix else '.mp3'
-    cached_file = cache_dir / f"{url_hash}{extension}"
+    extension = url_path.suffix if url_path.suffix else None
+    cached_file = cache_dir / f"{url_hash}{extension}" if extension else cache_dir / url_hash
     
     # Only download if file doesn't already exist in cache
     if cached_file.exists():
@@ -387,10 +387,25 @@ def resolve_source_file(source_file: str) -> str:
 
 
 def load_config(config_file: str) -> Dict:
-    """Load configuration from JSON file."""
-    config_path = Path(config_file)
-    if not config_path.exists():
-        raise FileNotFoundError(f"Configuration file not found: {config_file}")
+    """
+    Load configuration from JSON file or URL.
+    
+    Args:
+        config_file: Path to local JSON file or HTTP/HTTPS URL
+        
+    Returns:
+        Configuration dictionary
+    """
+    # Check if it's a URL
+    if config_file.startswith('http://') or config_file.startswith('https://'):
+        # Download and cache the config file
+        cached_config = download_and_cache_file(config_file)
+        config_path = cached_config
+    else:
+        # It's a local file path
+        config_path = Path(config_file)
+        if not config_path.exists():
+            raise FileNotFoundError(f"Configuration file not found: {config_file}")
     
     try:
         with open(config_path, 'r') as f:
@@ -398,6 +413,8 @@ def load_config(config_file: str) -> Dict:
         return config
     except json.JSONDecodeError as e:
         raise ValueError(f"Invalid JSON in configuration file: {e}")
+    except Exception as e:
+        raise ValueError(f"Error loading configuration: {e}")
 
 
 def create_endpoints_from_config(config: Dict) -> List[StreamEndpoint]:
@@ -443,7 +460,7 @@ Examples:
     parser.add_argument('-f', '--file',
                        help='Path to MP3 file to stream (required for legacy mode, not needed with config file)')
     parser.add_argument('-c', '--config',
-                       help='Path to JSON configuration file with endpoint(s)')
+                       help='Path to JSON configuration file or HTTP/HTTPS URL with endpoint(s)')
     
     # Legacy single endpoint arguments (optional if config is provided)
     parser.add_argument('-H', '--host',
