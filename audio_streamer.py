@@ -323,13 +323,28 @@ def download_and_cache_file(url: str) -> Path:
     # Create a hash of the URL to use as the filename
     url_hash = hashlib.md5(url.encode()).hexdigest()
     
-    # Try to determine file extension from URL or try to infer from content-type
-    url_path = Path(url)
+    # Try to determine file extension from URL
+    url_path = Path(url.split('?')[0])  # Remove query parameters
     extension = url_path.suffix if url_path.suffix else None
-    cached_file = cache_dir / f"{url_hash}{extension}" if extension else cache_dir / url_hash
     
     # Only download if file doesn't already exist in cache
-    if cached_file.exists():
+    # First check if file exists with any extension matching the hash
+    # For now, we'll check both with and without extension
+    if extension:
+        cached_file = cache_dir / f"{url_hash}{extension}"
+    else:
+        # Default to checking for common extensions
+        for ext in ['.json', '.mp3', '.m3u', '.pls']:
+            test_file = cache_dir / f"{url_hash}{ext}"
+            if test_file.exists():
+                cached_file = test_file
+                print(f"Using cached file for {url}: {cached_file}")
+                return cached_file
+        # No existing file found, will determine extension from content-type
+        cached_file = None
+    
+    # Check if cached file exists (when extension was known)
+    if cached_file and cached_file.exists():
         print(f"Using cached file for {url}: {cached_file}")
         return cached_file
     
@@ -345,6 +360,21 @@ def download_and_cache_file(url: str) -> Path:
                     response.headers, 
                     None
                 )
+            
+            # If no extension found in URL, try to infer from Content-Type
+            if not extension:
+                content_type = response.headers.get('Content-Type', '').lower()
+                if 'json' in content_type:
+                    extension = '.json'
+                elif 'audio/mpeg' in content_type or 'audio/mp3' in content_type:
+                    extension = '.mp3'
+                else:
+                    # Default based on common use cases
+                    extension = '.mp3'  # Default for audio files
+            
+            # Set cached_file if not already set
+            if not cached_file:
+                cached_file = cache_dir / f"{url_hash}{extension}"
             
             # Read and write to cache file
             with open(cached_file, 'wb') as f:
