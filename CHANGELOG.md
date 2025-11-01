@@ -5,6 +5,27 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.0.2] - 2025-01-XX
+
+### Added
+- Support for HTTP/HTTPS source file URLs
+- Automatic download and caching of remote source files
+- Cache directory at `~/.cache/audio-push/` for downloaded files
+- Per-endpoint source file configuration
+- Per-endpoint protocol configuration (HTTP/HTTPS)
+- Automatic file extension detection from URLs
+
+### Changed
+- Endpoints now require individual `source_file` specification
+- Source files can be local paths or HTTP/HTTPS URLs
+- Protocol (HTTP/HTTPS) is now configurable per endpoint
+- Configuration file no longer requires `-f/--file` command-line argument
+
+### Technical Details
+- Cached files use MD5 hash of URL as filename for consistency
+- Files are only downloaded if not already in cache
+- Cache location: `~/.cache/audio-push/`
+
 ## [0.0.1] - 2025-11-01
 
 ### Added
@@ -36,6 +57,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - No external Python dependencies (uses standard library only)
 - Multi-threaded streaming architecture
 - Process management for FFmpeg instances
+
+[0.0.2]: https://github.com/alephcom/audio-push/releases/tag/v0.0.2
 
 [0.0.1]: https://github.com/alephcom/audio-push/releases/tag/v0.0.1
 

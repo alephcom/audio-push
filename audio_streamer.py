@@ -4,7 +4,7 @@ Audio Streamer to Icecast
 Streams an MP3 file to an Icecast server in a continuous loop.
 """
 
-__version__ = "0.0.1"
+__version__ = "0.0.2"
 
 import subprocess
 import sys
