@@ -9,11 +9,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 - Support for HTTP/HTTPS source file URLs
+- Support for HTTP/HTTPS configuration file URLs
 - Automatic download and caching of remote source files
+- Automatic download and caching of remote configuration files
 - Cache directory at `~/.cache/audio-push/` for downloaded files
 - Per-endpoint source file configuration
 - Per-endpoint protocol configuration (HTTP/HTTPS)
-- Automatic file extension detection from URLs
+- Automatic file extension detection from URLs and Content-Type headers
+- Content-Type based file extension inference for downloaded files
 
 ### Changed
 - Endpoints now require individual `source_file` specification
