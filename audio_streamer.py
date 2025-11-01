@@ -4,6 +4,8 @@ Audio Streamer to Icecast
 Streams an MP3 file to an Icecast server in a continuous loop.
 """
 
+__version__ = "0.0.1"
+
 import subprocess
 import sys
 import os
@@ -340,6 +342,7 @@ Examples:
                        help='Icecast username (default: source, legacy)')
     parser.add_argument('-n', '--name', default='Audio Stream',
                        help='Stream name (default: Audio Stream, legacy)')
+    parser.add_argument('--version', action='version', version=f'%(prog)s {__version__}')
     
     args = parser.parse_args()
     
