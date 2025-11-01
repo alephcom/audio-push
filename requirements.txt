@@ -1,0 +1,10 @@
+# Python dependencies for audio-push
+# Note: This application requires ffmpeg to be installed separately
+# Install ffmpeg:
+#   macOS: brew install ffmpeg
+#   Linux: sudo apt-get install ffmpeg (Ubuntu/Debian) or sudo yum install ffmpeg (RHEL/CentOS)
+#   Windows: Download from https://ffmpeg.org/download.html
+
+# Currently, this application uses subprocess to call ffmpeg directly
+# No Python dependencies are required beyond the standard library
+

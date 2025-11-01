@@ -1,0 +1,41 @@
+{
+  "endpoints": [
+    {
+      "host": "localhost",
+      "port": 8000,
+      "mount": "/stream.mp3",
+      "username": "source",
+      "password": "your_source_password",
+      "stream_name": "My Radio Station",
+      "bitrate": "128k"
+    },
+    {
+      "host": "icecast.example.com",
+      "port": 8000,
+      "mount": "/live.mp3",
+      "username": "source",
+      "password": "another_password",
+      "stream_name": "Alternative Stream",
+      "bitrate": "128k"
+    },
+    {
+      "host": "192.168.1.100",
+      "port": 8000,
+      "mount": "/backup.mp3",
+      "username": "source",
+      "password": "password123",
+      "stream_name": "Backup Stream",
+      "bitrate": "128k"
+    },
+    {
+      "host": "192.168.1.101",
+      "port": 8000,
+      "mount": "/low_quality.mp3",
+      "username": "source",
+      "password": "password456",
+      "stream_name": "Low Quality Stream",
+      "bitrate": "64k"
+    }
+  ]
+}
+
