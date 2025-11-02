@@ -5,6 +5,25 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.0.3] - 2025-01-XX
+
+### Added
+- Support for directories as `source_file` - automatically creates playlist from all audio files in folder
+- Automatic playlist generation for directories using FFmpeg concat demuxer
+- Support for multiple audio formats in directories (.mp3, .wav, .ogg, .m4a, .aac, .flac, .opus)
+- Files in directories are played in alphabetical order in a continuous loop
+- Force download option for configuration files to always get latest version
+
+### Changed
+- Configuration files from URLs are always downloaded (bypass cache) to ensure latest version
+- Improved file extension detection for cached downloads
+- Better handling of URLs with query parameters
+
+### Technical Details
+- Directories create `.audio-push-playlist.txt` files using FFmpeg concat format
+- Playlist files are automatically generated and managed
+- Force download option for config files ensures fresh configuration on each run
+
 ## [0.0.2] - 2025-01-XX
 
 ### Added
@@ -60,6 +79,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - No external Python dependencies (uses standard library only)
 - Multi-threaded streaming architecture
 - Process management for FFmpeg instances
+
+[0.0.3]: https://github.com/alephcom/audio-push/releases/tag/v0.0.3
 
 [0.0.2]: https://github.com/alephcom/audio-push/releases/tag/v0.0.2
 

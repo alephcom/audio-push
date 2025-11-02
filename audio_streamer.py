@@ -4,7 +4,7 @@ Audio Streamer to Icecast
 Streams an MP3 file to an Icecast server in a continuous loop.
 """
 
-__version__ = "0.0.2"
+__version__ = "0.0.3"
 
 import subprocess
 import sys
@@ -112,10 +112,13 @@ class AudioStreamer:
                 resolved_file = resolve_source_file(endpoint.source_file)
                 endpoint.source_file = resolved_file
                 
-                # Validate the resolved file exists
+                # Validate the resolved file or directory exists
                 source_path = Path(resolved_file)
                 if not source_path.exists():
-                    raise FileNotFoundError(f"Source MP3 file not found for endpoint {endpoint.host}:{endpoint.port}{endpoint.mount}: {source_path}")
+                    # Check if it's a directory
+                    original_path = Path(endpoint.source_file)
+                    if not original_path.exists():
+                        raise FileNotFoundError(f"Source file or directory not found for endpoint {endpoint.host}:{endpoint.port}{endpoint.mount}: {source_path}")
         
         if not self.endpoints:
             raise ValueError("At least one endpoint must be provided")
@@ -142,12 +145,26 @@ class AudioStreamer:
     
     def build_ffmpeg_command(self, stream_group: StreamGroup):
         """Build the ffmpeg command for streaming to multiple endpoints."""
-        ffmpeg_cmd = [
-            'ffmpeg',
-            '-re',  # Read input at native frame rate (important for streaming)
-            '-stream_loop', '-1',  # Loop the input indefinitely
-            '-i', str(stream_group.mp3_file),  # Input file
-        ]
+        # Check if it's a playlist file (created from directory)
+        is_playlist = stream_group.mp3_file.name == '.audio-push-playlist.txt'
+        
+        ffmpeg_cmd = ['ffmpeg']
+        
+        if is_playlist:
+            # Use concat demuxer for playlist files (directory of files)
+            ffmpeg_cmd.extend([
+                '-f', 'concat',  # Use concat demuxer
+                '-safe', '0',  # Allow unsafe file names
+                '-stream_loop', '-1',  # Loop the playlist indefinitely
+                '-i', str(stream_group.mp3_file),  # Playlist file
+            ])
+        else:
+            # Regular single file input
+            ffmpeg_cmd.extend([
+                '-re',  # Read input at native frame rate (important for streaming)
+                '-stream_loop', '-1',  # Loop the input indefinitely
+                '-i', str(stream_group.mp3_file),  # Input file
+            ])
         
         # For each endpoint in the group, add output parameters
         # FFmpeg processes outputs sequentially, so each needs its own encoding params
@@ -185,8 +202,19 @@ class AudioStreamer:
         # Display grouping information
         for group in self.stream_groups:
             group_id = group.get_group_id()
+            is_playlist = group.mp3_file.name == '.audio-push-playlist.txt'
+            source_type = "Directory (playlist)" if is_playlist else "File"
             print(f"\nGroup: {group_id} ({len(group.endpoints)} endpoint(s))")
-            print(f"  Source File: {group.mp3_file}")
+            print(f"  Source Type: {source_type}")
+            print(f"  Source Path: {group.mp3_file}")
+            if is_playlist:
+                # Count files in the playlist
+                try:
+                    with open(group.mp3_file, 'r') as f:
+                        file_count = len([line for line in f if line.strip().startswith("file ")])
+                    print(f"  Files in playlist: {file_count}")
+                except:
+                    pass
             for endpoint in group.endpoints:
                 endpoint_id = self.get_endpoint_id(endpoint)
                 print(f"  → {endpoint.protocol.upper()}://{endpoint.host}:{endpoint.port}{endpoint.mount}")
@@ -307,13 +335,14 @@ def get_cache_dir() -> Path:
     return cache_dir
 
 
-def download_and_cache_file(url: str) -> Path:
+def download_and_cache_file(url: str, force_download: bool = False) -> Path:
     """
     Download a file from URL and cache it locally.
-    Only downloads if the file doesn't already exist in the cache.
+    Only downloads if the file doesn't already exist in the cache, unless force_download is True.
     
     Args:
         url: URL to download (http:// or https://)
+        force_download: If True, always download even if cached file exists
         
     Returns:
         Path to the cached file
@@ -327,26 +356,33 @@ def download_and_cache_file(url: str) -> Path:
     url_path = Path(url.split('?')[0])  # Remove query parameters
     extension = url_path.suffix if url_path.suffix else None
     
-    # Only download if file doesn't already exist in cache
+    # Only download if file doesn't already exist in cache (unless force_download is True)
     # First check if file exists with any extension matching the hash
     # For now, we'll check both with and without extension
     if extension:
         cached_file = cache_dir / f"{url_hash}{extension}"
     else:
         # Default to checking for common extensions
+        cached_file = None
         for ext in ['.json', '.mp3', '.m3u', '.pls']:
             test_file = cache_dir / f"{url_hash}{ext}"
             if test_file.exists():
                 cached_file = test_file
-                print(f"Using cached file for {url}: {cached_file}")
-                return cached_file
+                break
         # No existing file found, will determine extension from content-type
-        cached_file = None
+        if cached_file is None:
+            cached_file = None
     
     # Check if cached file exists (when extension was known)
-    if cached_file and cached_file.exists():
+    # Skip cache check if force_download is True
+    if cached_file and cached_file.exists() and not force_download:
         print(f"Using cached file for {url}: {cached_file}")
         return cached_file
+    
+    # If forcing download and file exists, remove it first
+    if cached_file and cached_file.exists() and force_download:
+        print(f"Force downloading {url} (replacing cached file)...")
+        cached_file.unlink()
     
     # File doesn't exist in cache, download it
     print(f"Downloading {url} to cache...")
@@ -397,28 +433,83 @@ def download_and_cache_file(url: str) -> Path:
         raise ValueError(f"Error downloading {url}: {e}")
 
 
+def get_audio_files_from_directory(directory: Path) -> List[Path]:
+    """
+    Get all audio files from a directory.
+    
+    Args:
+        directory: Path to directory
+        
+    Returns:
+        List of audio file paths, sorted alphabetically
+    """
+    audio_extensions = {'.mp3', '.wav', '.ogg', '.m4a', '.aac', '.flac', '.opus'}
+    audio_files = []
+    
+    for file_path in sorted(directory.iterdir()):
+        if file_path.is_file() and file_path.suffix.lower() in audio_extensions:
+            audio_files.append(file_path)
+    
+    if not audio_files:
+        raise ValueError(f"No audio files found in directory: {directory}")
+    
+    return audio_files
+
+
+def create_playlist_file(audio_files: List[Path], playlist_path: Path) -> Path:
+    """
+    Create an FFmpeg concat playlist file from a list of audio files.
+    
+    Args:
+        audio_files: List of audio file paths
+        playlist_path: Path where playlist file will be created
+        
+    Returns:
+        Path to created playlist file
+    """
+    with open(playlist_path, 'w') as f:
+        for audio_file in audio_files:
+            # Escape single quotes and backslashes for FFmpeg concat format
+            escaped_path = str(audio_file.absolute()).replace("'", "'\\''")
+            f.write(f"file '{escaped_path}'\n")
+    
+    return playlist_path
+
+
 def resolve_source_file(source_file: str) -> str:
     """
     Resolve source file path, downloading from URL if necessary.
+    If source_file is a directory, create a playlist file.
     
     Args:
-        source_file: Local file path or HTTP/HTTPS URL
+        source_file: Local file path, HTTP/HTTPS URL, or directory path
         
     Returns:
-        Path to local file (either original path or cached download)
+        Path to local file (original path, cached download, or playlist file)
     """
     # Check if it's a URL
     if source_file.startswith('http://') or source_file.startswith('https://'):
         cached_file = download_and_cache_file(source_file)
         return str(cached_file)
     else:
-        # It's a local file path
-        return source_file
+        # It's a local file or directory path
+        source_path = Path(source_file)
+        
+        if source_path.is_dir():
+            # It's a directory, create a playlist
+            audio_files = get_audio_files_from_directory(source_path)
+            playlist_path = source_path / '.audio-push-playlist.txt'
+            create_playlist_file(audio_files, playlist_path)
+            return str(playlist_path)
+        else:
+            # It's a regular file
+            return source_file
 
 
 def load_config(config_file: str) -> Dict:
     """
     Load configuration from JSON file or URL.
+    Config files from URLs are always downloaded (not cached), ensuring latest version.
     
     Args:
         config_file: Path to local JSON file or HTTP/HTTPS URL
@@ -428,8 +519,8 @@ def load_config(config_file: str) -> Dict:
     """
     # Check if it's a URL
     if config_file.startswith('http://') or config_file.startswith('https://'):
-        # Download and cache the config file
-        cached_config = download_and_cache_file(config_file)
+        # Always download config file (force download, bypass cache)
+        cached_config = download_and_cache_file(config_file, force_download=True)
         config_path = cached_config
     else:
         # It's a local file path
