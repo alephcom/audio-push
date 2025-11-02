@@ -16,12 +16,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 - Configuration files from URLs are always downloaded (bypass cache) to ensure latest version
+- Playlist files are now stored in cache directory (`~/.cache/audio-push/`) instead of source directory
 - Improved file extension detection for cached downloads
 - Better handling of URLs with query parameters
 
 ### Technical Details
-- Directories create `.audio-push-playlist.txt` files using FFmpeg concat format
-- Playlist files are automatically generated and managed
+- Directories create playlist files using FFmpeg concat format stored in cache directory
+- Playlist files use MD5 hash of directory path as filename prefix
+- Playlist files are automatically generated and managed in cache
 - Force download option for config files ensures fresh configuration on each run
 
 ## [0.0.2] - 2025-01-XX

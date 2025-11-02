@@ -146,7 +146,7 @@ class AudioStreamer:
     def build_ffmpeg_command(self, stream_group: StreamGroup):
         """Build the ffmpeg command for streaming to multiple endpoints."""
         # Check if it's a playlist file (created from directory)
-        is_playlist = stream_group.mp3_file.name == '.audio-push-playlist.txt'
+        is_playlist = stream_group.mp3_file.name.endswith('.audio-push-playlist.txt')
         
         ffmpeg_cmd = ['ffmpeg']
         
@@ -202,7 +202,7 @@ class AudioStreamer:
         # Display grouping information
         for group in self.stream_groups:
             group_id = group.get_group_id()
-            is_playlist = group.mp3_file.name == '.audio-push-playlist.txt'
+            is_playlist = group.mp3_file.name.endswith('.audio-push-playlist.txt')
             source_type = "Directory (playlist)" if is_playlist else "File"
             print(f"\nGroup: {group_id} ({len(group.endpoints)} endpoint(s))")
             print(f"  Source Type: {source_type}")
@@ -479,7 +479,7 @@ def create_playlist_file(audio_files: List[Path], playlist_path: Path) -> Path:
 def resolve_source_file(source_file: str) -> str:
     """
     Resolve source file path, downloading from URL if necessary.
-    If source_file is a directory, create a playlist file.
+    If source_file is a directory, create a playlist file in the cache.
     
     Args:
         source_file: Local file path, HTTP/HTTPS URL, or directory path
@@ -496,9 +496,14 @@ def resolve_source_file(source_file: str) -> str:
         source_path = Path(source_file)
         
         if source_path.is_dir():
-            # It's a directory, create a playlist
+            # It's a directory, create a playlist in cache directory
             audio_files = get_audio_files_from_directory(source_path)
-            playlist_path = source_path / '.audio-push-playlist.txt'
+            cache_dir = get_cache_dir()
+            
+            # Create a hash of the directory path for the playlist filename
+            dir_hash = hashlib.md5(str(source_path.absolute()).encode()).hexdigest()
+            playlist_path = cache_dir / f"{dir_hash}.audio-push-playlist.txt"
+            
             create_playlist_file(audio_files, playlist_path)
             return str(playlist_path)
         else:
